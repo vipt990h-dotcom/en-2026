@@ -1,234 +1,81 @@
-let currentCategory = "أمهات";
-let session = JSON.parse(localStorage.getItem(STORAGE_KEYS.session) || "{}");
-let records = JSON.parse(localStorage.getItem(STORAGE_KEYS.records) || "[]");
+<!doctype html><html lang="ar" dir="rtl"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>منصة الفرقان للأرشفة الذكية</title>
+<link rel="stylesheet" href="style.css"><link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0A2E63">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="منصة الفرقان">
+<link rel="apple-touch-icon" href="assets/app-icon.png"><link rel="icon" href="assets/app-icon.png">
+</head><body>
+<section id="login" class="login"><div class="login-card">
+<img src="assets/furqan-logo.png" class="logo"><h1>منصة الفرقان</h1>
+<h2>للأرشفة الذكية وفهرسة الدرايف</h2>
+<p>الملفات تبقى في Google Drive والمنصة ترتب روابطها وتبحث فيها</p>
+<input id="username" class="input" placeholder="اسم المستخدم">
+<input id="password" type="password" class="input" placeholder="كلمة المرور">
+<button class="btn main" onclick="login()">دخول النظام</button>
+<div class="hint">بيانات الدخول:<br><b>admin</b> / <b>1234</b></div>
+</div></section>
 
-const $ = (id) => document.getElementById(id);
+<section id="app" class="app">
+<aside class="side"><img src="assets/furqan-logo.png" class="side-logo"><h2>منصة الفرقان</h2><p>فهرس الدرايف الذكي</p>
+<button class="nav active" onclick="show('dashboard',this)">🏠 لوحة التحكم</button>
+<button class="nav" onclick="show('centers',this)">🏢 إدارة المراكز</button>
+<button class="nav" onclick="show('indexDrive',this)">🔗 فهرسة رابط</button>
+<button class="nav" onclick="show('records',this)">📁 سجل الروابط</button>
+<button class="nav" onclick="show('search',this)">🔍 البحث الذكي</button>
+<button class="nav" onclick="show('reports',this)">📊 التقارير</button>
+<button class="nav" onclick="logout()">🚪 خروج</button></aside>
 
-function saveRecords(){ localStorage.setItem(STORAGE_KEYS.records, JSON.stringify(records)); }
-function saveSession(){ localStorage.setItem(STORAGE_KEYS.session, JSON.stringify(session)); }
+<main class="mainarea"><header><div><h1 id="pageTitle">لوحة التحكم</h1>
+<p>أضيفي المركز ثم فهرسي روابط الدرايف حسب العام الهجري ونوع العمل.</p></div>
+<input class="search" onkeyup="smartSearch(this.value)" placeholder="بحث سريع..."></header>
 
-function init(){
-  buildCategoryTabs();
-  fillCategorySelects();
-  $("recordDate").valueAsDate = new Date();
+<section id="dashboard" class="page">
+<div class="cards">
+<div class="card"><b id="kCenters">0</b><span>المراكز</span></div>
+<div class="card"><b id="kLinks">0</b><span>روابط مفهرسة</span></div>
+<div class="card"><b id="kEdu">0</b><span>تعليمي</span></div>
+<div class="card"><b id="kAdmin">0</b><span>إداري</span></div>
+<div class="card"><b id="kMissing">0</b><span>ناقص / تحديث</span></div>
+</div>
+<div class="panel"><h3>البداية</h3>
+<button class="big-action" onclick="show('centers',document.querySelectorAll('.nav')[1])">➕ إضافة مركز</button>
+<button class="big-action light" onclick="addZainab()">إضافة مركز زينب كنموذج</button>
+<button class="big-action green" onclick="show('indexDrive',document.querySelectorAll('.nav')[2])">🔗 فهرسة رابط درايف</button>
+</div><div class="panel"><h3>آخر الروابط</h3><div id="latest"></div></div></section>
 
-  $("loginBtn").addEventListener("click", login);
-  $("logoutBtn").addEventListener("click", logout);
-  document.querySelectorAll(".sidebar nav button").forEach(btn => btn.addEventListener("click", () => showPage(btn.dataset.page, btn)));
-  document.querySelectorAll("[data-goto]").forEach(btn => btn.addEventListener("click", () => showPage(btn.dataset.goto)));
-  $("recordCategory").addEventListener("change", fillTeachersForRecord);
-  $("recordForm").addEventListener("submit", saveRecord);
-  $("searchInput").addEventListener("input", renderRecords);
-  $("filterCategory").addEventListener("change", renderRecords);
-  $("filterType").addEventListener("change", renderRecords);
-  $("exportRecordsBtn").addEventListener("click", exportCSV);
-  $("exportReportBtn").addEventListener("click", exportCSV);
-  $("clearAllBtn").addEventListener("click", clearAllRecords);
+<section id="centers" class="page hidden"><div class="panel"><h3>إضافة مركز</h3>
+<div class="grid">
+<input id="cName" class="input" placeholder="اسم المركز"><input id="cManager" class="input" placeholder="اسم المديرة">
+<input id="cPhone" class="input" placeholder="الجوال"><input id="cEmail" class="input" placeholder="البريد">
+<select id="cPeriod" class="input"><option>صباحي</option><option>مسائي</option><option>صباحي ومسائي</option></select>
+<input id="cCity" class="input" placeholder="المدينة"><input id="cDrive" class="input wide" placeholder="رابط درايف المركز الرئيسي">
+</div><button class="btn gold" onclick="saveCenter()">حفظ المركز</button></div>
+<div class="panel"><h3>سجل المراكز</h3><div id="centersTable"></div></div></section>
 
-  if(session.center){ $("loginCenter").value = session.center; $("loginRole").value = session.role; $("loginName").value = session.name; }
-  fillTeachersForRecord();
-  renderAll();
-}
+<section id="indexDrive" class="page hidden"><div class="panel"><h3>فهرسة رابط من Google Drive</h3>
+<p class="note">انسخي رابط الملف أو المجلد من الدرايف ثم صنفيه هنا.</p>
+<div class="grid">
+<select id="rCenter" class="input"></select><input id="rYear" class="input" placeholder="العام الهجري مثال 1448">
+<select id="rType" class="input"><option>تعليمي</option><option>إداري</option></select>
+<select id="rSection" class="input"><option>الإدارة</option><option>البرامج والأنشطة</option><option>الجودة</option><option>المعلمات</option><option>المستفيدات</option><option>التقارير</option><option>الصور والإنجازات</option><option>أخرى</option></select>
+<input id="rTitle" class="input" placeholder="اسم الملف أو المجلد">
+<select id="rStatus" class="input"><option>موجود</option><option>ناقص</option><option>يحتاج تحديث</option><option>خاص</option></select>
+<input id="rLink" class="input wide" placeholder="رابط Google Drive">
+</div><textarea id="rNotes" class="input text" placeholder="ملاحظات"></textarea>
+<button class="btn gold" onclick="saveRecord()">حفظ الفهرسة</button></div></section>
 
-function login(){
-  const center = $("loginCenter").value.trim() || "مركز زينب بنت العوام";
-  const role = $("loginRole").value;
-  const name = $("loginName").value.trim() || "أ. تهاني القرشي";
-  session = {center, role, name};
-  saveSession();
-  $("centerTitle").textContent = center;
-  $("userRole").textContent = role;
-  $("userName").textContent = name;
-  $("recordRole").value = role;
-  $("loginPage").classList.add("hidden");
-  $("appPage").classList.remove("hidden");
-  applyPermissions();
-  renderAll();
-}
+<section id="records" class="page hidden"><div class="panel"><h3>سجل روابط الدرايف</h3>
+<div class="tools"><button class="btn navy" onclick="exportCSV()">تصدير CSV</button><button class="btn green" onclick="window.print()">طباعة</button></div>
+<div id="recordsTable"></div></div></section>
 
-function logout(){
-  $("loginPage").classList.remove("hidden");
-  $("appPage").classList.add("hidden");
-}
+<section id="search" class="page hidden"><div class="panel"><h3>البحث الذكي</h3>
+<input class="input" onkeyup="smartSearch(this.value)" placeholder="ابحثي باسم المركز، العام، تعليمي/إداري، القسم...">
+<div id="searchResults"></div></div></section>
 
-function applyPermissions(){
-  const role = session.role || "مديرة المركز";
-  const isSupervisor = role === "المشرفة";
-  $("recordForm").querySelectorAll("input,select,textarea,button").forEach(el => el.disabled = isSupervisor);
-  if(isSupervisor){
-    document.querySelector('[data-page="newRecord"]').style.display = "none";
-  } else {
-    document.querySelector('[data-page="newRecord"]').style.display = "";
-  }
-}
-
-function showPage(pageId, btn){
-  document.querySelectorAll(".page").forEach(p => p.classList.add("hidden"));
-  $(pageId).classList.remove("hidden");
-  document.querySelectorAll(".sidebar nav button").forEach(b => b.classList.remove("active"));
-  const activeBtn = btn || document.querySelector(`[data-page="${pageId}"]`);
-  if(activeBtn) activeBtn.classList.add("active");
-  renderAll();
-}
-
-function buildCategoryTabs(){
-  $("categoryTabs").innerHTML = CATEGORIES.map(cat => `<button class="${cat===currentCategory?'active':''}" data-cat="${cat}">${cat}</button>`).join("");
-  $("categoryTabs").querySelectorAll("button").forEach(btn => btn.addEventListener("click", () => {
-    currentCategory = btn.dataset.cat;
-    document.querySelectorAll("#categoryTabs button").forEach(b=>b.classList.remove("active"));
-    btn.classList.add("active");
-    $("recordCategory").value = currentCategory;
-    fillTeachersForRecord();
-    renderAll();
-  }));
-}
-
-function fillCategorySelects(){
-  $("recordCategory").innerHTML = CATEGORIES.map(c=>`<option>${c}</option>`).join("");
-  $("filterCategory").innerHTML = `<option value="الكل">كل الفئات</option>` + CATEGORIES.map(c=>`<option>${c}</option>`).join("");
-}
-
-function fillTeachersForRecord(){
-  const cat = $("recordCategory").value || currentCategory;
-  $("recordTeacher").innerHTML = (DEFAULT_TEACHERS[cat] || []).map(t=>`<option>${t}</option>`).join("");
-}
-
-function saveRecord(e){
-  e.preventDefault();
-  const rec = {
-    id: Date.now(),
-    center: session.center || "مركز زينب بنت العوام",
-    student: $("studentName").value.trim(),
-    category: $("recordCategory").value,
-    teacher: $("recordTeacher").value,
-    type: $("recordType").value,
-    date: $("recordDate").value,
-    time: $("recordTime").value,
-    duration: $("recordDuration").value.trim(),
-    role: $("recordRole").value,
-    notes: $("recordNotes").value.trim()
-  };
-  if(!rec.student){ alert("فضلاً اكتبي اسم الدارسة"); return; }
-  records.unshift(rec);
-  saveRecords();
-  $("recordForm").reset();
-  $("recordDate").valueAsDate = new Date();
-  $("recordRole").value = session.role || "مديرة المركز";
-  fillTeachersForRecord();
-  renderAll();
-  alert("تم حفظ السجل بنجاح");
-}
-
-function renderAll(){
-  renderDashboard();
-  renderRecords();
-  renderReports();
-  renderStudents();
-  renderTeachers();
-}
-
-function categoryRecords(cat=currentCategory){ return records.filter(r => r.category === cat); }
-function unique(arr){ return [...new Set(arr.filter(Boolean))]; }
-
-function renderDashboard(){
-  const r = categoryRecords();
-  $("statTotal").textContent = r.length;
-  $("statAbsent").textContent = r.filter(x=>x.type==="غياب").length;
-  $("statLate").textContent = r.filter(x=>x.type==="تأخير").length;
-  $("statPermit").textContent = r.filter(x=>x.type==="استئذان").length;
-  $("statStudents").textContent = unique(r.map(x=>x.student)).length;
-
-  $("recentRecords").innerHTML = r.slice(0,6).map(item => `
-    <div class="record-item">
-      <div><strong>${item.student}</strong><br><small>${item.teacher} | ${item.date || "--"}</small></div>
-      <span class="badge ${item.type}">${item.type}</span>
-    </div>`).join("") || `<p>لا توجد سجلات لهذه الفئة بعد.</p>`;
-
-  $("dashboardTeachers").innerHTML = DEFAULT_TEACHERS[currentCategory].map(t => `
-    <div class="teacher-item"><strong>${t}</strong><span>${currentCategory}</span></div>`).join("");
-}
-
-function filteredRecords(){
-  const q = $("searchInput")?.value.trim() || "";
-  const cat = $("filterCategory")?.value || "الكل";
-  const type = $("filterType")?.value || "الكل";
-  return records.filter(r => 
-    (cat==="الكل" || r.category===cat) &&
-    (type==="الكل" || r.type===type) &&
-    (!q || r.student.includes(q) || r.teacher.includes(q))
-  );
-}
-
-function renderRecords(){
-  const body = $("recordsTable");
-  if(!body) return;
-  body.innerHTML = filteredRecords().map((r,i)=>`
-    <tr>
-      <td>${i+1}</td><td>${r.date || "--"}</td><td>${r.student}</td><td>${r.category}</td><td>${r.teacher}</td>
-      <td><span class="badge ${r.type}">${r.type}</span></td><td>${r.duration || "--"}</td><td>${r.notes || "--"}</td>
-      <td><button class="btn danger" onclick="deleteRecord(${r.id})">حذف</button></td>
-    </tr>
-  `).join("") || `<tr><td colspan="9">لا توجد سجلات مطابقة.</td></tr>`;
-}
-
-function deleteRecord(id){
-  if((session.role || "") === "المشرفة"){ alert("صلاحية المشرفة للعرض والتقارير فقط."); return; }
-  if(confirm("هل تريدين حذف هذا السجل؟")){
-    records = records.filter(r => r.id !== id);
-    saveRecords();
-    renderAll();
-  }
-}
-
-function renderReports(){
-  const total = records.length;
-  const absent = records.filter(r=>r.type==="غياب").length;
-  const late = records.filter(r=>r.type==="تأخير").length;
-  const permit = records.filter(r=>r.type==="استئذان").length;
-  $("reportCards").innerHTML = `
-    <div class="stat-card navy"><span>الإجمالي</span><strong>${total}</strong><small>سجل</small></div>
-    <div class="stat-card red"><span>غياب</span><strong>${absent}</strong><small>حالة</small></div>
-    <div class="stat-card blue"><span>تأخير</span><strong>${late}</strong><small>حالة</small></div>
-    <div class="stat-card gold"><span>استئذان</span><strong>${permit}</strong><small>حالة</small></div>
-  `;
-  $("categoryReport").innerHTML = CATEGORIES.map(cat => {
-    const r = categoryRecords(cat);
-    return `<div class="report-row"><strong>${cat}</strong><span>${r.length} سجل | غياب ${r.filter(x=>x.type==="غياب").length} | تأخير ${r.filter(x=>x.type==="تأخير").length} | استئذان ${r.filter(x=>x.type==="استئذان").length}</span></div>`;
-  }).join("");
-}
-
-function renderStudents(){
-  $("studentsList").innerHTML = CATEGORIES.map(cat => {
-    const names = unique(records.filter(r=>r.category===cat).map(r=>r.student));
-    return `<div class="panel"><h3>${cat}</h3>${names.map(n=>`<div class="student-item"><strong>${n}</strong><span>${records.filter(r=>r.student===n).length} سجل</span></div>`).join("") || "<p>لا توجد أسماء بعد.</p>"}</div>`;
-  }).join("");
-}
-
-function renderTeachers(){
-  $("teachersList").innerHTML = CATEGORIES.map(cat => `
-    <div class="panel"><h3>${cat}</h3>
-      ${DEFAULT_TEACHERS[cat].map(t=>`<div class="teacher-item"><strong>${t}</strong><span>${records.filter(r=>r.teacher===t).length} سجل</span></div>`).join("")}
-    </div>`).join("");
-}
-
-function exportCSV(){
-  const rows = [["المركز","التاريخ","اسم الدارسة","الفئة","المعلمة","نوع الحالة","وقت الحضور","المدة","الصلاحية","الملاحظات"]];
-  filteredRecords().forEach(r => rows.push([r.center,r.date,r.student,r.category,r.teacher,r.type,r.time,r.duration,r.role,r.notes]));
-  const csv = "\ufeff" + rows.map(row => row.map(v => `"${String(v||"").replaceAll('"','""')}"`).join(",")).join("\n");
-  const blob = new Blob([csv], {type:"text/csv;charset=utf-8"});
-  const link = document.createElement("a");
-  link.href = URL.createObjectURL(blob);
-  link.download = "تقرير_منصة_انضباط.csv";
-  link.click();
-}
-
-function clearAllRecords(){
-  if((session.role || "") !== "مديرة المركز"){ alert("حذف جميع السجلات متاح لمديرة المركز فقط."); return; }
-  if(confirm("سيتم حذف جميع السجلات المحفوظة في هذا الجهاز، هل أنتِ متأكدة؟")){
-    records = [];
-    saveRecords();
-    renderAll();
-  }
-}
-
-document.addEventListener("DOMContentLoaded", init);
+<section id="reports" class="page hidden"><div class="panel"><h3>التقارير</h3><div id="reportBox"></div></div></section>
+<footer>حقوق التصميم والفكرة للأستاذة تهاني القرشي — جمعية الفرقان</footer>
+</main></section><script src="script.js"></script>
+<script>if("serviceWorker" in navigator){window.addEventListener("load",()=>navigator.serviceWorker.register("./service-worker.js"));}</script>
+</body></html>
