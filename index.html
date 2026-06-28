@@ -1,0 +1,234 @@
+let currentCategory = "أمهات";
+let session = JSON.parse(localStorage.getItem(STORAGE_KEYS.session) || "{}");
+let records = JSON.parse(localStorage.getItem(STORAGE_KEYS.records) || "[]");
+
+const $ = (id) => document.getElementById(id);
+
+function saveRecords(){ localStorage.setItem(STORAGE_KEYS.records, JSON.stringify(records)); }
+function saveSession(){ localStorage.setItem(STORAGE_KEYS.session, JSON.stringify(session)); }
+
+function init(){
+  buildCategoryTabs();
+  fillCategorySelects();
+  $("recordDate").valueAsDate = new Date();
+
+  $("loginBtn").addEventListener("click", login);
+  $("logoutBtn").addEventListener("click", logout);
+  document.querySelectorAll(".sidebar nav button").forEach(btn => btn.addEventListener("click", () => showPage(btn.dataset.page, btn)));
+  document.querySelectorAll("[data-goto]").forEach(btn => btn.addEventListener("click", () => showPage(btn.dataset.goto)));
+  $("recordCategory").addEventListener("change", fillTeachersForRecord);
+  $("recordForm").addEventListener("submit", saveRecord);
+  $("searchInput").addEventListener("input", renderRecords);
+  $("filterCategory").addEventListener("change", renderRecords);
+  $("filterType").addEventListener("change", renderRecords);
+  $("exportRecordsBtn").addEventListener("click", exportCSV);
+  $("exportReportBtn").addEventListener("click", exportCSV);
+  $("clearAllBtn").addEventListener("click", clearAllRecords);
+
+  if(session.center){ $("loginCenter").value = session.center; $("loginRole").value = session.role; $("loginName").value = session.name; }
+  fillTeachersForRecord();
+  renderAll();
+}
+
+function login(){
+  const center = $("loginCenter").value.trim() || "مركز زينب بنت العوام";
+  const role = $("loginRole").value;
+  const name = $("loginName").value.trim() || "أ. تهاني القرشي";
+  session = {center, role, name};
+  saveSession();
+  $("centerTitle").textContent = center;
+  $("userRole").textContent = role;
+  $("userName").textContent = name;
+  $("recordRole").value = role;
+  $("loginPage").classList.add("hidden");
+  $("appPage").classList.remove("hidden");
+  applyPermissions();
+  renderAll();
+}
+
+function logout(){
+  $("loginPage").classList.remove("hidden");
+  $("appPage").classList.add("hidden");
+}
+
+function applyPermissions(){
+  const role = session.role || "مديرة المركز";
+  const isSupervisor = role === "المشرفة";
+  $("recordForm").querySelectorAll("input,select,textarea,button").forEach(el => el.disabled = isSupervisor);
+  if(isSupervisor){
+    document.querySelector('[data-page="newRecord"]').style.display = "none";
+  } else {
+    document.querySelector('[data-page="newRecord"]').style.display = "";
+  }
+}
+
+function showPage(pageId, btn){
+  document.querySelectorAll(".page").forEach(p => p.classList.add("hidden"));
+  $(pageId).classList.remove("hidden");
+  document.querySelectorAll(".sidebar nav button").forEach(b => b.classList.remove("active"));
+  const activeBtn = btn || document.querySelector(`[data-page="${pageId}"]`);
+  if(activeBtn) activeBtn.classList.add("active");
+  renderAll();
+}
+
+function buildCategoryTabs(){
+  $("categoryTabs").innerHTML = CATEGORIES.map(cat => `<button class="${cat===currentCategory?'active':''}" data-cat="${cat}">${cat}</button>`).join("");
+  $("categoryTabs").querySelectorAll("button").forEach(btn => btn.addEventListener("click", () => {
+    currentCategory = btn.dataset.cat;
+    document.querySelectorAll("#categoryTabs button").forEach(b=>b.classList.remove("active"));
+    btn.classList.add("active");
+    $("recordCategory").value = currentCategory;
+    fillTeachersForRecord();
+    renderAll();
+  }));
+}
+
+function fillCategorySelects(){
+  $("recordCategory").innerHTML = CATEGORIES.map(c=>`<option>${c}</option>`).join("");
+  $("filterCategory").innerHTML = `<option value="الكل">كل الفئات</option>` + CATEGORIES.map(c=>`<option>${c}</option>`).join("");
+}
+
+function fillTeachersForRecord(){
+  const cat = $("recordCategory").value || currentCategory;
+  $("recordTeacher").innerHTML = (DEFAULT_TEACHERS[cat] || []).map(t=>`<option>${t}</option>`).join("");
+}
+
+function saveRecord(e){
+  e.preventDefault();
+  const rec = {
+    id: Date.now(),
+    center: session.center || "مركز زينب بنت العوام",
+    student: $("studentName").value.trim(),
+    category: $("recordCategory").value,
+    teacher: $("recordTeacher").value,
+    type: $("recordType").value,
+    date: $("recordDate").value,
+    time: $("recordTime").value,
+    duration: $("recordDuration").value.trim(),
+    role: $("recordRole").value,
+    notes: $("recordNotes").value.trim()
+  };
+  if(!rec.student){ alert("فضلاً اكتبي اسم الدارسة"); return; }
+  records.unshift(rec);
+  saveRecords();
+  $("recordForm").reset();
+  $("recordDate").valueAsDate = new Date();
+  $("recordRole").value = session.role || "مديرة المركز";
+  fillTeachersForRecord();
+  renderAll();
+  alert("تم حفظ السجل بنجاح");
+}
+
+function renderAll(){
+  renderDashboard();
+  renderRecords();
+  renderReports();
+  renderStudents();
+  renderTeachers();
+}
+
+function categoryRecords(cat=currentCategory){ return records.filter(r => r.category === cat); }
+function unique(arr){ return [...new Set(arr.filter(Boolean))]; }
+
+function renderDashboard(){
+  const r = categoryRecords();
+  $("statTotal").textContent = r.length;
+  $("statAbsent").textContent = r.filter(x=>x.type==="غياب").length;
+  $("statLate").textContent = r.filter(x=>x.type==="تأخير").length;
+  $("statPermit").textContent = r.filter(x=>x.type==="استئذان").length;
+  $("statStudents").textContent = unique(r.map(x=>x.student)).length;
+
+  $("recentRecords").innerHTML = r.slice(0,6).map(item => `
+    <div class="record-item">
+      <div><strong>${item.student}</strong><br><small>${item.teacher} | ${item.date || "--"}</small></div>
+      <span class="badge ${item.type}">${item.type}</span>
+    </div>`).join("") || `<p>لا توجد سجلات لهذه الفئة بعد.</p>`;
+
+  $("dashboardTeachers").innerHTML = DEFAULT_TEACHERS[currentCategory].map(t => `
+    <div class="teacher-item"><strong>${t}</strong><span>${currentCategory}</span></div>`).join("");
+}
+
+function filteredRecords(){
+  const q = $("searchInput")?.value.trim() || "";
+  const cat = $("filterCategory")?.value || "الكل";
+  const type = $("filterType")?.value || "الكل";
+  return records.filter(r => 
+    (cat==="الكل" || r.category===cat) &&
+    (type==="الكل" || r.type===type) &&
+    (!q || r.student.includes(q) || r.teacher.includes(q))
+  );
+}
+
+function renderRecords(){
+  const body = $("recordsTable");
+  if(!body) return;
+  body.innerHTML = filteredRecords().map((r,i)=>`
+    <tr>
+      <td>${i+1}</td><td>${r.date || "--"}</td><td>${r.student}</td><td>${r.category}</td><td>${r.teacher}</td>
+      <td><span class="badge ${r.type}">${r.type}</span></td><td>${r.duration || "--"}</td><td>${r.notes || "--"}</td>
+      <td><button class="btn danger" onclick="deleteRecord(${r.id})">حذف</button></td>
+    </tr>
+  `).join("") || `<tr><td colspan="9">لا توجد سجلات مطابقة.</td></tr>`;
+}
+
+function deleteRecord(id){
+  if((session.role || "") === "المشرفة"){ alert("صلاحية المشرفة للعرض والتقارير فقط."); return; }
+  if(confirm("هل تريدين حذف هذا السجل؟")){
+    records = records.filter(r => r.id !== id);
+    saveRecords();
+    renderAll();
+  }
+}
+
+function renderReports(){
+  const total = records.length;
+  const absent = records.filter(r=>r.type==="غياب").length;
+  const late = records.filter(r=>r.type==="تأخير").length;
+  const permit = records.filter(r=>r.type==="استئذان").length;
+  $("reportCards").innerHTML = `
+    <div class="stat-card navy"><span>الإجمالي</span><strong>${total}</strong><small>سجل</small></div>
+    <div class="stat-card red"><span>غياب</span><strong>${absent}</strong><small>حالة</small></div>
+    <div class="stat-card blue"><span>تأخير</span><strong>${late}</strong><small>حالة</small></div>
+    <div class="stat-card gold"><span>استئذان</span><strong>${permit}</strong><small>حالة</small></div>
+  `;
+  $("categoryReport").innerHTML = CATEGORIES.map(cat => {
+    const r = categoryRecords(cat);
+    return `<div class="report-row"><strong>${cat}</strong><span>${r.length} سجل | غياب ${r.filter(x=>x.type==="غياب").length} | تأخير ${r.filter(x=>x.type==="تأخير").length} | استئذان ${r.filter(x=>x.type==="استئذان").length}</span></div>`;
+  }).join("");
+}
+
+function renderStudents(){
+  $("studentsList").innerHTML = CATEGORIES.map(cat => {
+    const names = unique(records.filter(r=>r.category===cat).map(r=>r.student));
+    return `<div class="panel"><h3>${cat}</h3>${names.map(n=>`<div class="student-item"><strong>${n}</strong><span>${records.filter(r=>r.student===n).length} سجل</span></div>`).join("") || "<p>لا توجد أسماء بعد.</p>"}</div>`;
+  }).join("");
+}
+
+function renderTeachers(){
+  $("teachersList").innerHTML = CATEGORIES.map(cat => `
+    <div class="panel"><h3>${cat}</h3>
+      ${DEFAULT_TEACHERS[cat].map(t=>`<div class="teacher-item"><strong>${t}</strong><span>${records.filter(r=>r.teacher===t).length} سجل</span></div>`).join("")}
+    </div>`).join("");
+}
+
+function exportCSV(){
+  const rows = [["المركز","التاريخ","اسم الدارسة","الفئة","المعلمة","نوع الحالة","وقت الحضور","المدة","الصلاحية","الملاحظات"]];
+  filteredRecords().forEach(r => rows.push([r.center,r.date,r.student,r.category,r.teacher,r.type,r.time,r.duration,r.role,r.notes]));
+  const csv = "\ufeff" + rows.map(row => row.map(v => `"${String(v||"").replaceAll('"','""')}"`).join(",")).join("\n");
+  const blob = new Blob([csv], {type:"text/csv;charset=utf-8"});
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = "تقرير_منصة_انضباط.csv";
+  link.click();
+}
+
+function clearAllRecords(){
+  if((session.role || "") !== "مديرة المركز"){ alert("حذف جميع السجلات متاح لمديرة المركز فقط."); return; }
+  if(confirm("سيتم حذف جميع السجلات المحفوظة في هذا الجهاز، هل أنتِ متأكدة؟")){
+    records = [];
+    saveRecords();
+    renderAll();
+  }
+}
+
+document.addEventListener("DOMContentLoaded", init);
